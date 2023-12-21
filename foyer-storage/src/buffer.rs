@@ -12,7 +12,10 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
-use std::fmt::Debug;
+use std::{
+    fmt::Debug,
+    sync::{atomic::Ordering, Arc},
+};
 
 use foyer_common::{
     bits::{align_up, is_aligned},
@@ -25,6 +28,7 @@ use crate::{
     flusher::Entry,
     generic::{checksum, EntryHeader},
     region::{RegionHeader, RegionId, Version, REGION_MAGIC},
+    statistics::Statistics,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -78,6 +82,8 @@ where
     device: D,
 
     default_buffer_capacity: usize,
+
+    statistics: Arc<Statistics>,
 }
 
 impl<K, V, D> FlushBuffer<K, V, D>
@@ -86,7 +92,7 @@ where
     V: Value,
     D: Device,
 {
-    pub fn new(device: D, default_buffer_capacity: usize) -> Self {
+    pub fn new(device: D, default_buffer_capacity: usize, statistics: Arc<Statistics>) -> Self {
         let default_buffer_capacity = std::cmp::max(default_buffer_capacity, device.io_size());
         let buffer = device.io_buffer(0, default_buffer_capacity);
         Self {
@@ -96,6 +102,7 @@ where
             entries: vec![],
             device,
             default_buffer_capacity,
+            statistics,
         }
     }
 
@@ -290,6 +297,9 @@ where
 
         let key = kcursor.into_inner();
         let value = vcursor.into_inner();
+        self.statistics
+            .written_bytes
+            .fetch_add(target - old, Ordering::Relaxed);
 
         self.entries.push(PositionedEntry {
             entry: Entry {
@@ -345,7 +355,11 @@ mod tests {
         .unwrap();
         const DEFAULT_BUFFER_CAPACITY: usize = 32 * 1024;
 
-        let mut buffer = FlushBuffer::new(device.clone(), DEFAULT_BUFFER_CAPACITY);
+        let mut buffer = FlushBuffer::new(
+            device.clone(),
+            DEFAULT_BUFFER_CAPACITY,
+            Arc::new(Statistics::default()),
+        );
         assert_eq!(buffer.region(), None);
 
         const HEADER: usize = EntryHeader::serialized_len();

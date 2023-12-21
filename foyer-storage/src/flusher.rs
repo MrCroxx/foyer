@@ -27,6 +27,7 @@ use crate::{
     error::Result,
     metrics::Metrics,
     region_manager::{RegionEpItemAdapter, RegionManager},
+    statistics::Statistics,
 };
 
 pub struct Entry<K, V>
@@ -105,9 +106,10 @@ where
         device: D,
         entry_rx: mpsc::UnboundedReceiver<Entry<K, V>>,
         metrics: Arc<Metrics>,
+        statistics: Arc<Statistics>,
         stop_rx: broadcast::Receiver<()>,
     ) -> Self {
-        let buffer = FlushBuffer::new(device.clone(), default_buffer_capacity);
+        let buffer = FlushBuffer::new(device.clone(), default_buffer_capacity, statistics);
         Self {
             region_manager,
             catalog,

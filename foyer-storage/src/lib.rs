@@ -42,5 +42,6 @@ pub mod reinsertion;
 pub mod runtime;
 pub mod storage;
 pub mod store;
+pub mod statistics;
 
 pub mod test_utils;

@@ -16,7 +16,7 @@ use std::{fmt::Debug, sync::Arc};
 
 use foyer_common::code::{Key, Value};
 
-use crate::{catalog::Catalog, metrics::Metrics};
+use crate::{catalog::Catalog, statistics::Statistics};
 
 #[derive(Debug)]
 pub struct AdmissionContext<K, V>
@@ -25,7 +25,7 @@ where
     V: Value,
 {
     pub catalog: Arc<Catalog<K, V>>,
-    pub metrics: Arc<Metrics>,
+    pub statistics: Arc<Statistics>,
 }
 
 impl<K, V> Clone for AdmissionContext<K, V>
@@ -36,7 +36,7 @@ where
     fn clone(&self) -> Self {
         Self {
             catalog: self.catalog.clone(),
-            metrics: self.metrics.clone(),
+            statistics: self.statistics.clone(),
         }
     }
 }

@@ -32,7 +32,7 @@ struct Inner {
 impl RateLimiter {
     pub fn new(rate: f64) -> Self {
         let inner = Inner {
-            quota: 0.0,
+            quota: rate,
             last: Instant::now(),
         };
         Self {

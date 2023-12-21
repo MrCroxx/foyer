@@ -73,8 +73,8 @@ where
     fn judge(&self, _key: &Self::Key, _weight: usize) -> bool {
         let res = self.inner.probe();
 
-        let metrics = self.context.get().unwrap().metrics.as_ref();
-        let current = metrics.op_bytes_reinsert.get() as usize;
+        let statistics = self.context.get().unwrap().statistics.as_ref();
+        let current = statistics.written_bytes.load(Ordering::Relaxed);
         let last = self.last.load(Ordering::Relaxed);
         let delta = current.saturating_sub(last);
 

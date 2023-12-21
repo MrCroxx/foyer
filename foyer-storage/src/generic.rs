@@ -53,6 +53,7 @@ use crate::{
     region::{Region, RegionHeader, RegionId},
     region_manager::{RegionEpItemAdapter, RegionManager},
     reinsertion::{ReinsertionContext, ReinsertionPolicy},
+    statistics::Statistics,
     storage::{Storage, StorageWriter},
 };
 
@@ -211,8 +212,6 @@ where
     metrics: Arc<Metrics>,
 
     compression: Compression,
-
-    _marker: PhantomData<V>,
 }
 
 impl<K, V, D, EP, EL> GenericStore<K, V, D, EP, EL>
@@ -227,6 +226,7 @@ where
         tracing::info!("open store with config:\n{:#?}", config);
 
         let metrics = Arc::new(METRICS.foyer(&config.name));
+        let statistics = Arc::new(Statistics::default());
 
         let device = D::open(config.device_config).await?;
         assert!(device.regions() >= config.flushers * 2);
@@ -274,7 +274,6 @@ where
             reclaimers_stop_tx,
             metrics: metrics.clone(),
             compression: config.compression,
-            _marker: PhantomData,
         };
         let store = Self {
             inner: Arc::new(inner),
@@ -282,11 +281,11 @@ where
 
         let admission_context = AdmissionContext {
             catalog: catalog.clone(),
-            metrics: metrics.clone(),
+            statistics: statistics.clone(),
         };
         let reinsertion_context = ReinsertionContext {
             catalog: catalog.clone(),
-            metrics: metrics.clone(),
+            statistics: statistics.clone(),
         };
 
         for admission in store.inner.admissions.iter() {
@@ -307,6 +306,7 @@ where
                     device.clone(),
                     entry_rx,
                     metrics.clone(),
+                    statistics.clone(),
                     stop_rx,
                 )
             })
