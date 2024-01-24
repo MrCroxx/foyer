@@ -16,7 +16,9 @@
 #![feature(lint_reasons)]
 #![feature(error_generic_member_access)]
 #![feature(lazy_cell)]
+#![feature(negative_impls)]
 
+pub mod batch;
 pub mod buf;
 pub mod error;
 pub mod metrics;

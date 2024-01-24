@@ -35,6 +35,9 @@ pub struct Args {
     #[arg(short, long)]
     dir: String,
 
+    #[arg(short, long, default_value_t = 1)]
+    notifiers: usize,
+
     /// writer concurrency
     #[arg(short, long, default_value_t = 1024)]
     concurrency: usize,
@@ -78,6 +81,7 @@ async fn main() {
 
     let config = TombstoneLogConfig {
         id: 0,
+        notifiers: args.notifiers,
         dir: args.dir.clone().into(),
         metrics: Arc::new(METRICS.metrics("wal-bench")),
     };

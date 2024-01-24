@@ -17,6 +17,7 @@ anyhow = "1.0"
 bytes = "1"
 crossbeam = { version = "0.8", features = ["std", "crossbeam-channel"] }
 foyer-workspace-hack = { version = "0.2", path = "../foyer-workspace-hack" }
+itertools = "0.12"
 parking_lot = { version = "0.12", features = ["arc_lock"] }
 paste = "1.0"
 prometheus = "0.13"
@@ -29,7 +30,6 @@ bytesize = "1"
 clap = { version = "4", features = ["derive"] }
 foyer-common = { version = "0.3", path = "../foyer-common" }
 hdrhistogram = "7"
-itertools = "0.12"
 rand = "0.8.5"
 rand_mt = "4.2.1"
 tempfile = "3"

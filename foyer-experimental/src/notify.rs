@@ -30,14 +30,20 @@ pub struct Notify {
 }
 
 impl Notify {
+    /// Note: `notified` must be called in the target thread.
     pub fn notified(&self) -> Notified {
-        self.thread.set(current()).unwrap();
+        self.thread
+            .set(current())
+            .expect("`notified` can only be called once on the same `Notify`.");
         Notified::new(self.ready.clone())
     }
 
     pub fn notify(&self) {
         self.ready.store(true, Ordering::SeqCst);
-        self.thread.get().unwrap().unpark();
+        self.thread
+            .get()
+            .expect("`notified` must be called before `notify`")
+            .unpark();
     }
 }
 

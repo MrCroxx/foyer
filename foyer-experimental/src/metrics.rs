@@ -69,6 +69,7 @@ pub struct GlobalMetrics {
 
     pub inner_op_duration: HistogramVec,
     pub inner_op_bytes: IntCounterVec,
+    pub inner_op_objects_distribution: HistogramVec,
     pub inner_op_bytes_distribution: HistogramVec,
 }
 
@@ -119,6 +120,14 @@ impl GlobalMetrics {
             registry,
         )
         .unwrap();
+        let inner_op_objects_distribution = register_histogram_vec_with_registry!(
+            "foyer_storage_inner_op_objects_distribution",
+            "foyer storage inner op objects distribution",
+            &["foyer", "op", "extra"],
+            exponential_buckets(1.0, 2.0, 16).unwrap(), // 1 ~ 65536
+            registry,
+        )
+        .unwrap();
         let inner_op_bytes_distribution = register_histogram_vec_with_registry!(
             "foyer_storage_inner_op_bytes_distribution",
             "foyer storage inner op bytes distribution",
@@ -134,6 +143,7 @@ impl GlobalMetrics {
             total_bytes,
             inner_op_duration,
             inner_op_bytes,
+            inner_op_objects_distribution,
             inner_op_bytes_distribution,
         }
     }
@@ -153,7 +163,10 @@ pub struct Metrics {
     pub inner_op_duration_wal_sync: Histogram,
 
     pub inner_op_duration_wal_append: Histogram,
+    pub inner_op_duration_wal_submit: Histogram,
     pub inner_op_duration_wal_notify: Histogram,
+
+    pub inner_op_objects_distribution_wal_notify: Histogram,
 
     pub _total_bytes: UintGauge,
 }
@@ -173,7 +186,6 @@ impl Metrics {
         let inner_op_duration_wal_write = global
             .inner_op_duration
             .with_label_values(&[foyer, "wal", "write"]);
-
         let inner_op_duration_wal_sync = global
             .inner_op_duration
             .with_label_values(&[foyer, "wal", "sync"]);
@@ -181,8 +193,14 @@ impl Metrics {
         let inner_op_duration_wal_append = global
             .inner_op_duration
             .with_label_values(&[foyer, "wal", "append"]);
+        let inner_op_duration_wal_submit = global
+            .inner_op_duration
+            .with_label_values(&[foyer, "wal", "submit"]);
         let inner_op_duration_wal_notify = global
             .inner_op_duration
+            .with_label_values(&[foyer, "wal", "notify"]);
+        let inner_op_objects_distribution_wal_notify = global
+            .inner_op_objects_distribution
             .with_label_values(&[foyer, "wal", "notify"]);
 
         let total_bytes = global.total_bytes.with_label_values(&[foyer, "", ""]);
@@ -196,7 +214,9 @@ impl Metrics {
             inner_op_duration_wal_sync,
 
             inner_op_duration_wal_append,
+            inner_op_duration_wal_submit,
             inner_op_duration_wal_notify,
+            inner_op_objects_distribution_wal_notify,
 
             _total_bytes: total_bytes,
         }

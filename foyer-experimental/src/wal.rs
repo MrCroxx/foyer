@@ -21,15 +21,16 @@ use std::{
         Arc,
     },
     thread::JoinHandle,
+    time::Instant,
 };
 
 use bytes::{Buf, BufMut};
-use crossbeam::channel;
-use parking_lot::{Condvar, Mutex};
+use itertools::Itertools;
+use parking_lot::Mutex;
 use tokio::sync::oneshot;
 
 use crate::{
-    asyncify,
+    asyncify, batch,
     buf::{BufExt, BufMutExt},
     error::Result,
     metrics::Metrics,
@@ -105,6 +106,7 @@ impl<H: HashValue> Tombstone<H> {
 pub struct TombstoneLogConfig {
     pub id: usize,
     pub dir: PathBuf,
+    pub notifiers: usize,
     pub metrics: Arc<Metrics>,
 }
 
@@ -115,14 +117,8 @@ struct InflightTombstone<H: HashValue> {
 }
 
 #[derive(Debug)]
-struct TombstoneLogInner<H: HashValue> {
-    inflights: Mutex<Vec<InflightTombstone<H>>>,
-    condvar: Condvar,
-}
-
-#[derive(Debug)]
 pub struct TombstoneLog<H: HashValue> {
-    inner: Arc<TombstoneLogInner<H>>,
+    tx: batch::Sender<InflightTombstone<H>>,
 
     metrics: Arc<Metrics>,
 
@@ -133,7 +129,7 @@ pub struct TombstoneLog<H: HashValue> {
 impl<H: HashValue> Clone for TombstoneLog<H> {
     fn clone(&self) -> Self {
         Self {
-            inner: self.inner.clone(),
+            tx: self.tx.clone(),
             metrics: self.metrics.clone(),
             stopped: self.stopped.clone(),
             handles: self.handles.clone(),
@@ -153,36 +149,55 @@ impl<H: HashValue> TombstoneLog<H> {
             .create(true)
             .open(path)?;
 
-        let inner = Arc::new(TombstoneLogInner {
-            inflights: Mutex::new(vec![]),
-            condvar: Condvar::new(),
-        });
+        let txs = (0..config.notifiers)
+            .map(|_| batch::Sender::default())
+            .collect_vec();
 
-        let (task_tx, task_rx) = channel::unbounded();
         let stopped = Arc::new(AtomicBool::new(false));
         let metrics = config.metrics.clone();
 
-        let flusher = TombstoneLogFlusher {
-            file,
-            inner: inner.clone(),
-            task_tx,
-            metrics: metrics.clone(),
-            stopped: stopped.clone(),
+        let tx = batch::Sender::default();
+
+        // Create and run the flusher.
+        let handle = {
+            let tx = tx.clone();
+            let txs = txs.clone();
+            let metrics = metrics.clone();
+            let stopped = stopped.clone();
+
+            std::thread::spawn(move || {
+                let flusher = TombstoneLogFlusher {
+                    file,
+                    rx: tx.subscribe(),
+                    txs: txs,
+                    metrics,
+                    stopped,
+                };
+                flusher.run()
+            })
         };
 
-        let notifier = TombstoneLogFlushNotifier {
-            task_rx,
-            metrics: metrics.clone(),
-        };
+        // Create and run the notifiers.
+        let handles = txs.into_iter().map(|tx| {
+            let metrics = metrics.clone();
+            let stopped = stopped.clone();
 
-        let handles = vec![
-            std::thread::spawn(move || flusher.run()),
-            std::thread::spawn(move || notifier.run()),
-        ];
+            std::thread::spawn(move || {
+                let notifier = TombstoneLogFlushNotifier {
+                    rx: tx.subscribe(),
+                    metrics,
+                    stopped,
+                };
+                notifier.run()
+            })
+        });
+
+        let handles = std::iter::once(handle).chain(handles).collect_vec();
+
         let handles = Arc::new(Mutex::new(handles));
 
         Ok(Self {
-            inner,
+            tx,
 
             metrics,
 
@@ -195,7 +210,7 @@ impl<H: HashValue> TombstoneLog<H> {
         let handles = std::mem::take(&mut *self.handles.lock());
         if !handles.is_empty() {
             self.stopped.store(true, Ordering::Release);
-            self.inner.condvar.notify_one();
+            self.tx.notify();
             for handle in handles {
                 asyncify(move || handle.join().unwrap()).await?;
             }
@@ -204,18 +219,20 @@ impl<H: HashValue> TombstoneLog<H> {
     }
 
     pub async fn append(&self, tombstone: Tombstone<H>) -> Result<()> {
-        let timer = self.metrics.inner_op_duration_wal_append.start_timer();
+        let now = Instant::now();
 
-        let rx = {
-            let mut inflights = self.inner.inflights.lock();
-            let (tx, rx) = oneshot::channel();
-            inflights.push(InflightTombstone { tombstone, tx });
-            rx
-        };
-        self.inner.condvar.notify_one();
+        let (tx, rx) = oneshot::channel();
+        self.tx.send(InflightTombstone { tombstone, tx });
+
+        self.metrics
+            .inner_op_duration_wal_submit
+            .observe(now.elapsed().as_secs_f64());
+
         let res = rx.await.unwrap();
 
-        drop(timer);
+        self.metrics
+            .inner_op_duration_wal_append
+            .observe(now.elapsed().as_secs_f64());
 
         res
     }
@@ -225,9 +242,9 @@ impl<H: HashValue> TombstoneLog<H> {
 struct TombstoneLogFlusher<H: HashValue> {
     file: File,
 
-    inner: Arc<TombstoneLogInner<H>>,
+    rx: batch::Receiver<InflightTombstone<H>>,
 
-    task_tx: channel::Sender<FlushNotifyTask>,
+    txs: Vec<batch::Sender<FlushNotifyTask>>,
 
     metrics: Arc<Metrics>,
 
@@ -236,22 +253,10 @@ struct TombstoneLogFlusher<H: HashValue> {
 
 impl<H: HashValue> TombstoneLogFlusher<H> {
     fn run(mut self) -> Result<()> {
+        let mut index = 0;
+
         loop {
-            let inflights = {
-                let mut inflights = self.inner.inflights.lock();
-                if self.stopped.load(Ordering::Relaxed) {
-                    return Ok(());
-                }
-                if inflights.is_empty() {
-                    self.inner.condvar.wait_while(&mut inflights, |inflights| {
-                        inflights.is_empty() && !self.stopped.load(Ordering::Relaxed)
-                    });
-                }
-                if self.stopped.load(Ordering::Relaxed) {
-                    return Ok(());
-                }
-                std::mem::take(&mut *inflights)
-            };
+            let inflights = { self.rx.recv() };
 
             let timer = self.metrics.inner_op_duration_wal_flush.start_timer();
 
@@ -267,12 +272,11 @@ impl<H: HashValue> TombstoneLogFlusher<H> {
             match self.file.write_all(&buffer) {
                 Ok(()) => {}
                 Err(e) => {
-                    self.task_tx
-                        .send(FlushNotifyTask {
-                            txs,
-                            io_result: Err(e),
-                        })
-                        .unwrap();
+                    self.txs[index % self.txs.len()].send(FlushNotifyTask {
+                        txs,
+                        io_result: Err(e),
+                    });
+                    index += 1;
                     continue;
                 }
             }
@@ -282,25 +286,28 @@ impl<H: HashValue> TombstoneLogFlusher<H> {
             match self.file.sync_data() {
                 Ok(()) => {}
                 Err(e) => {
-                    self.task_tx
-                        .send(FlushNotifyTask {
-                            txs,
-                            io_result: Err(e),
-                        })
-                        .unwrap();
+                    self.txs[index % self.txs.len()].send(FlushNotifyTask {
+                        txs,
+                        io_result: Err(e),
+                    });
+                    index += 1;
                     continue;
                 }
             }
             drop(timer_sync);
 
-            self.task_tx
-                .send(FlushNotifyTask {
-                    txs,
-                    io_result: Ok(()),
-                })
-                .unwrap();
+            self.txs[index % self.txs.len()].send(FlushNotifyTask {
+                txs,
+                io_result: Ok(()),
+            });
+            index += 1;
 
             drop(timer);
+
+            if self.stopped.load(Ordering::Relaxed) {
+                self.txs.iter().for_each(|tx| tx.notify());
+                return Ok(());
+            }
         }
     }
 }
@@ -313,24 +320,41 @@ struct FlushNotifyTask {
 
 #[derive(Debug)]
 struct TombstoneLogFlushNotifier {
-    task_rx: channel::Receiver<FlushNotifyTask>,
+    rx: batch::Receiver<FlushNotifyTask>,
 
     metrics: Arc<Metrics>,
+
+    stopped: Arc<AtomicBool>,
 }
 
 impl TombstoneLogFlushNotifier {
     fn run(self) -> Result<()> {
-        while let Ok(task) = self.task_rx.recv() {
+        loop {
             let timer = self.metrics.inner_op_duration_wal_notify.start_timer();
-            for tx in task.txs {
-                let res = match &task.io_result {
-                    Ok(()) => Ok(()),
-                    Err(e) => Err(std::io::Error::from(e.kind()).into()),
-                };
-                tx.send(res).unwrap();
+
+            let tasks = self.rx.recv();
+            let mut count = 0;
+
+            for task in tasks {
+                count += task.txs.len();
+                for tx in task.txs {
+                    let res = match &task.io_result {
+                        Ok(()) => Ok(()),
+                        Err(e) => Err(std::io::Error::from(e.kind()).into()),
+                    };
+                    tx.send(res).unwrap();
+                }
             }
+
+            self.metrics
+                .inner_op_objects_distribution_wal_notify
+                .observe(count as f64);
+
             drop(timer);
+
+            if self.stopped.load(Ordering::Relaxed) {
+                return Ok(());
+            }
         }
-        Ok(())
     }
 }
