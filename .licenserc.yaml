@@ -1,7 +1,7 @@
 header:
   license:
     spdx-id: Apache-2.0
-    copyright-owner: MrCroxx
+    copyright-owner: Foyer Project Authors
 
   paths:
     - "**/*.rs"
