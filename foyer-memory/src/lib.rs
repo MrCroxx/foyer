@@ -66,6 +66,7 @@
 //! destroyed.
 
 #![feature(trait_alias)]
+#![feature(offset_of)]
 
 pub trait Key: Send + Sync + 'static + std::hash::Hash + Eq + Ord {}
 pub trait Value: Send + Sync + 'static {}
@@ -73,13 +74,13 @@ pub trait Value: Send + Sync + 'static {}
 impl<T: Send + Sync + 'static + std::hash::Hash + Eq + Ord> Key for T {}
 impl<T: Send + Sync + 'static> Value for T {}
 
-mod cache;
-mod context;
-mod eviction;
-mod generic;
+pub mod cache;
+pub mod context;
+pub mod eviction;
+pub mod generic;
 mod handle;
-mod indexer;
-mod listener;
+pub mod indexer;
+pub mod listener;
 mod metrics;
 mod prelude;
 

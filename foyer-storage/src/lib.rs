@@ -23,6 +23,7 @@
 #![feature(associated_type_defaults)]
 #![feature(box_into_inner)]
 #![feature(try_trait_v2)]
+#![feature(offset_of)]
 
 pub mod admission;
 pub mod buffer;

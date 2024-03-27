@@ -26,6 +26,7 @@ libc = "0.2"
 parking_lot = "0.12"
 tokio = { workspace = true }
 
+
 [dev-dependencies]
 bytesize = "1"
 clap = { version = "4", features = ["derive"] }
@@ -33,6 +34,12 @@ hdrhistogram = "7"
 rand = "0.8"
 rand_mt = "4.2.1"
 tempfile = "3"
+zipf = "7.0.1"
+moka = { version = "0", features = ["sync"] }
 
 [features]
 deadlock = ["parking_lot/deadlock_detection"]
+
+[[bench]]
+name = "bench_hit_ratio"
+harness = false

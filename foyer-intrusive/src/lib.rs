@@ -16,6 +16,7 @@
 #![feature(ptr_metadata)]
 #![feature(trait_alias)]
 #![feature(lint_reasons)]
+#![feature(offset_of)]
 #![expect(clippy::new_without_default)]
 
 pub use memoffset::offset_of;
