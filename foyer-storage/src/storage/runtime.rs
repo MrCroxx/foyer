@@ -196,10 +196,6 @@ where
         self.store.stats()
     }
 
-    async fn wait(&self) -> Result<()> {
-        self.store.wait().await
-    }
-
     fn runtime(&self) -> &Handle {
         self.runtime.handle()
     }

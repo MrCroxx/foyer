@@ -310,11 +310,6 @@ where
         self.left.stats()
     }
 
-    async fn wait(&self) -> Result<()> {
-        try_join(self.left.wait(), self.right.wait()).await?;
-        Ok(())
-    }
-
     fn runtime(&self) -> &Handle {
         if cfg!(debug_assertions) {
             let hleft = self.left.runtime();

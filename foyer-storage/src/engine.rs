@@ -382,18 +382,6 @@ where
         }
     }
 
-    async fn wait(&self) -> Result<()> {
-        match self {
-            Engine::Noop(storage) => storage.wait().await,
-            Engine::Large(storage) => storage.wait().await,
-            Engine::LargeRuntime(storage) => storage.wait().await,
-            Engine::Small(storage) => storage.wait().await,
-            Engine::SmallRuntime(storage) => storage.wait().await,
-            Engine::Combined(storage) => storage.wait().await,
-            Engine::CombinedRuntime(storage) => storage.wait().await,
-        }
-    }
-
     fn runtime(&self) -> &tokio::runtime::Handle {
         match self {
             Engine::Noop(storage) => storage.runtime(),

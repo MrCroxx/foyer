@@ -30,11 +30,15 @@ use futures::future::{try_join, try_join_all};
 use parking_lot::Mutex;
 use std::{
     fmt::Debug,
-    sync::{atomic::Ordering, Arc},
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
 };
 use tokio::{
     runtime::Handle,
-    sync::{oneshot, Notify, Semaphore},
+    sync::{oneshot, Notify},
+    task::JoinHandle,
 };
 
 use super::{
@@ -82,10 +86,11 @@ where
 
     notify: Arc<Notify>,
 
-    flight: Arc<Semaphore>,
-
     compression: Compression,
     metrics: Arc<Metrics>,
+
+    handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    stop: Arc<AtomicBool>,
 }
 
 impl<K, V, S> Clone for Flusher<K, V, S>
@@ -98,9 +103,10 @@ where
         Self {
             batch: self.batch.clone(),
             notify: self.notify.clone(),
-            flight: self.flight.clone(),
             compression: self.compression,
             metrics: self.metrics.clone(),
+            handle: self.handle.clone(),
+            stop: self.stop.clone(),
         }
     }
 }
@@ -133,7 +139,7 @@ where
             indexer.clone(),
         )));
 
-        let flight = Arc::new(Semaphore::new(1));
+        let stop = Arc::<AtomicBool>::default();
 
         let runner = Runner {
             batch: batch.clone(),
@@ -144,20 +150,23 @@ where
             flush: config.flush,
             stats,
             metrics: metrics.clone(),
+            stop: stop.clone(),
         };
 
-        runtime.spawn(async move {
+        let handle = runtime.spawn(async move {
             if let Err(e) = runner.run().await {
-                tracing::error!("[flusher]: flusher exit with error: {e}");
+                tracing::error!("[lodc flusher]: flusher exit with error: {e}");
             }
         });
+        let handle = Arc::new(Mutex::new(Some(handle)));
 
         Ok(Self {
             batch,
             notify,
-            flight,
             compression: config.compression,
             metrics,
+            handle,
+            stop,
         })
     }
 
@@ -176,9 +185,13 @@ where
         self.notify.notify_one();
     }
 
-    pub async fn wait(&self) -> Result<()> {
-        // TODO(MrCroxx): Consider a better implementation?
-        let _permit = self.flight.acquire().await;
+    pub async fn close(&self) -> Result<()> {
+        self.stop.store(true, Ordering::SeqCst);
+        self.notify.notify_one();
+        let handle = self.handle.lock().take();
+        if let Some(handle) = handle {
+            handle.await.unwrap();
+        }
         Ok(())
     }
 
@@ -195,7 +208,7 @@ where
             value_len: info.value_len as _,
             hash: entry.hash(),
             sequence,
-            checksum: Checksummer::checksum(&buffer),
+            checksum: Checksummer::checksum64(&buffer),
             compression: self.compression,
         };
 
@@ -247,6 +260,8 @@ where
 
     stats: Arc<Statistics>,
     metrics: Arc<Metrics>,
+
+    stop: Arc<AtomicBool>,
 }
 
 impl<K, V, S> Runner<K, V, S>
@@ -256,12 +271,14 @@ where
     S: HashBuilder + Debug,
 {
     pub async fn run(self) -> Result<()> {
-        // TODO(MrCroxx): Graceful shutdown.
         loop {
             let rotation = self.batch.lock().rotate();
             let (batch, wait) = match rotation {
                 Some(rotation) => rotation,
                 None => {
+                    if self.stop.load(Ordering::SeqCst) {
+                        return Ok(());
+                    }
                     self.notify.notified().await;
                     continue;
                 }

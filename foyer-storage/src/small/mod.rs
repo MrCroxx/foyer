@@ -12,4 +12,9 @@
 //  See the License for the specific language governing permissions and
 //  limitations under the License.
 
+pub mod batch;
+pub mod flusher;
 pub mod generic;
+pub mod serde;
+pub mod set;
+pub mod set_manager;

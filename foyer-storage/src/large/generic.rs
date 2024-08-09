@@ -10,7 +10,7 @@
 //  distributed under the License is distributed on an "AS IS" BASIS,
 //  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 //  See the License for the specific language governing permissions and
-//  limitations under the License.use std::marker::PhantomData;
+//  limitations under the License.
 
 use std::{
     borrow::Borrow,
@@ -287,15 +287,11 @@ where
         })
     }
 
-    async fn wait(&self) -> Result<()> {
-        try_join_all(self.inner.flushers.iter().map(|flusher| flusher.wait())).await?;
-        join_all(self.inner.reclaimers.iter().map(|reclaimer| reclaimer.wait())).await;
-        Ok(())
-    }
-
     async fn close(&self) -> Result<()> {
         self.inner.active.store(false, Ordering::Relaxed);
-        self.wait().await
+        try_join_all(self.inner.flushers.iter().map(|flusher| flusher.close())).await?;
+        join_all(self.inner.reclaimers.iter().map(|reclaimer| reclaimer.wait())).await;
+        Ok(())
     }
 
     #[fastrace::trace(name = "foyer::storage::large::generic::enqueue")]
@@ -526,10 +522,6 @@ where
 
     fn stats(&self) -> Arc<DeviceStats> {
         self.inner.device.stat().clone()
-    }
-
-    async fn wait(&self) -> Result<()> {
-        self.wait().await
     }
 
     fn runtime(&self) -> &Handle {

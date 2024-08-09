@@ -190,11 +190,6 @@ where
         self.engine.stats()
     }
 
-    /// Wait for the ongoing flush and reclaim tasks to finish.
-    pub async fn wait(&self) -> Result<()> {
-        self.engine.wait().await
-    }
-
     /// Get disk cache runtime handle.
     ///
     /// The runtime is determined during the opening phase.
@@ -567,14 +562,26 @@ where
                     }
                     (CombinedConfig::Small, None) => {
                         Engine::open(EngineConfig::Small(GenericSmallStorageConfig {
-                            placeholder: PhantomData,
+                            memory: todo!(),
+                            set_size: todo!(),
+                            set_cache_capacity: todo!(),
+                            device,
+                            regions: todo!(),
+                            flush: todo!(),
+                            flushers: todo!(),
                         }))
                         .await?
                     }
                     (CombinedConfig::Small, Some(runtime_config)) => {
                         Engine::open(EngineConfig::SmallRuntime(RuntimeStoreConfig {
                             store_config: GenericSmallStorageConfig {
-                                placeholder: PhantomData,
+                                memory: todo!(),
+                                set_size: todo!(),
+                                set_cache_capacity: todo!(),
+                                device,
+                                regions: todo!(),
+                                flush: todo!(),
+                                flushers: todo!(),
                             },
                             runtime_config,
                         }))
@@ -595,7 +602,13 @@ where
                         Engine::open(EngineConfig::Combined(EitherConfig {
                             selector: SizeSelector::new(large_object_threshold),
                             left: GenericSmallStorageConfig {
-                                placeholder: PhantomData,
+                                memory: todo!(),
+                                set_size: todo!(),
+                                set_cache_capacity: todo!(),
+                                device,
+                                regions: todo!(),
+                                flush: todo!(),
+                                flushers: todo!(),
                             },
                             right: GenericLargeStorageConfig {
                                 memory: self.memory,
@@ -636,7 +649,13 @@ where
                             store_config: EitherConfig {
                                 selector: SizeSelector::new(large_object_threshold),
                                 left: GenericSmallStorageConfig {
-                                    placeholder: PhantomData,
+                                    memory: todo!(),
+                                    set_size: todo!(),
+                                    set_cache_capacity: todo!(),
+                                    device,
+                                    regions: todo!(),
+                                    flush: todo!(),
+                                    flushers: todo!(),
                                 },
                                 right: GenericLargeStorageConfig {
                                     memory: self.memory,

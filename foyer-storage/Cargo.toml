@@ -30,6 +30,7 @@ itertools = { workspace = true }
 lazy_static = "1"
 libc = "0.2"
 lz4 = "1.24"
+ordered_hash_map = "0.4"
 parking_lot = { version = "0.12", features = ["arc_lock"] }
 pin-project = "1"
 rand = "0.8"

@@ -128,10 +128,6 @@ pub trait Storage: Send + Sync + 'static + Clone + Debug {
     /// Get the statistics information of the disk cache.
     fn stats(&self) -> Arc<DeviceStats>;
 
-    /// Wait for the ongoing flush and reclaim tasks to finish.
-    #[must_use]
-    fn wait(&self) -> impl Future<Output = Result<()>> + Send;
-
     /// Get disk cache runtime handle.
     ///
     /// The runtime is determined during the opening phase.
