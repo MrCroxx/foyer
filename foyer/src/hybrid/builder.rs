@@ -173,6 +173,18 @@ where
         }
     }
 
+    /// Enable cleaner. Cleaner is a dedicated thread for clean the memory-released entries.
+    ///
+    /// Note: This must be set after the event listener is set.
+    pub fn with_cleaner(self, threads: usize) -> Self {
+        let builder = self.builder.with_cleaner(threads);
+        HybridCacheBuilderPhaseMemory {
+            name: self.name,
+            tracing_config: self.tracing_config,
+            builder,
+        }
+    }
+
     /// Continue to modify the in-memory cache configurations.
     pub fn storage(self) -> HybridCacheBuilderPhaseStorage<K, V, S> {
         let memory = self.builder.build();

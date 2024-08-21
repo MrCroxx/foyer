@@ -65,11 +65,12 @@
 #![warn(missing_docs)]
 
 mod cache;
+mod cleaner;
 mod context;
 mod eviction;
 mod generic;
 mod handle;
 mod indexer;
-mod prelude;
 
+mod prelude;
 pub use prelude::*;

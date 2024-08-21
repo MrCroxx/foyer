@@ -113,6 +113,10 @@ pub struct Args {
     #[arg(long, default_value_t = 64)]
     region_size: usize,
 
+    /// Enable cleaner for in-memory cache with given threads.
+    #[arg(long, default_value_t = 0)]
+    cleaner: usize,
+
     /// Flusher count.
     #[arg(long, default_value_t = 4)]
     flushers: usize,
@@ -468,12 +472,12 @@ async fn benchmark(args: Args) {
     tracing_config.set_record_hybrid_remove_threshold(Duration::from_micros(args.trace_remove_us as _));
     tracing_config.set_record_hybrid_fetch_threshold(Duration::from_micros(args.trace_fetch_us as _));
 
-    let builder = HybridCacheBuilder::new()
+    let mut builder = HybridCacheBuilder::new()
         .with_tracing_config(tracing_config)
         .memory(args.mem * MIB as usize)
         .with_shards(args.shards);
 
-    let builder = match args.eviction.as_str() {
+    builder = match args.eviction.as_str() {
         "lru" => builder.with_eviction_config(LruConfig::default()),
         "lfu" => builder.with_eviction_config(LfuConfig::default()),
         "fifo" => builder.with_eviction_config(FifoConfig::default()),
@@ -481,13 +485,17 @@ async fn benchmark(args: Args) {
         _ => panic!("unsupported eviction algorithm: {}", args.eviction),
     };
 
-    if let Some(dir) = args.dir.as_ref() {
-        create_dir_all(dir).unwrap();
+    if args.cleaner > 0 {
+        builder = builder.with_cleaner(args.cleaner);
     }
 
     let mut builder = builder
         .with_weighter(|_: &u64, value: &Value| u64::BITS as usize / 8 + value.len())
         .storage();
+
+    if let Some(dir) = args.dir.as_ref() {
+        create_dir_all(dir).unwrap();
+    }
 
     builder = match (args.file.as_ref(), args.dir.as_ref()) {
         (Some(file), None) => builder.with_device_config(

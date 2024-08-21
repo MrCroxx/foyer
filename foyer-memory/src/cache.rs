@@ -27,6 +27,7 @@ use foyer_common::{
 };
 
 use crate::{
+    cleaner::CleanerEventListener,
     context::CacheContext,
     eviction::{
         fifo::{Fifo, FifoHandle},
@@ -396,7 +397,21 @@ where
 
     /// Set event listener.
     pub fn with_event_listener(mut self, event_listener: Arc<dyn EventListener<Key = K, Value = V>>) -> Self {
+        if self.event_listener.is_some() {
+            tracing::warn!(
+                "[cache]: The event listener can only be set once. The original event listener is overwritten."
+            );
+        }
         self.event_listener = Some(event_listener);
+        self
+    }
+
+    /// Enable cleaner. Cleaner is a dedicated thread for clean the memory-released entries.
+    ///
+    /// Note: This must be set after the event listener is set.
+    pub fn with_cleaner(mut self, threads: usize) -> Self {
+        assert!(threads > 0, "cleaner threads must be larger than 0, given: {threads}");
+        self.event_listener = Some(Arc::new(CleanerEventListener::new(threads, self.event_listener.take())));
         self
     }
 
