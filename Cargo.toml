@@ -13,7 +13,7 @@ members = [
 ]
 
 [workspace.package]
-version = "0.12.1"
+version = "0.12.2"
 edition = "2021"
 rust-version = "1.81.0"
 repository = "https://github.com/foyer-rs/foyer"
@@ -47,11 +47,11 @@ clap = { version = "4", features = ["derive"] }
 bytesize = { package = "foyer-bytesize", version = "2" }
 hashbrown = "0.14"
 # foyer components
-foyer-common = { version = "0.12.1", path = "foyer-common" }
-foyer-intrusive = { version = "0.12.1", path = "foyer-intrusive" }
-foyer-memory = { version = "0.12.1", path = "foyer-memory" }
-foyer-storage = { version = "0.12.1", path = "foyer-storage" }
-foyer = { version = "0.12.1", path = "foyer" }
+foyer-common = { version = "0.12.2", path = "foyer-common" }
+foyer-intrusive = { version = "0.12.2", path = "foyer-intrusive" }
+foyer-memory = { version = "0.12.2", path = "foyer-memory" }
+foyer-storage = { version = "0.12.2", path = "foyer-storage" }
+foyer = { version = "0.12.2", path = "foyer" }
 
 [workspace.lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(madsim)'] }

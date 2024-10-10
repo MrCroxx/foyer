@@ -9,6 +9,23 @@ date: 2023-05-12T11:02:09+08:00
 
 <!-- truncate -->
 
+## 2024-10-11
+
+### Releases
+
+| crate | version |
+| - | - |
+| foyer | 0.12.2|
+| foyer-common | 0.12.2 |
+| foyer-intrusive | 0.12.2 |
+| foyer-memory | 0.12.2 |
+| foyer-storage | 0.12.2 |
+| foyer-bench | 0.12.2 |
+
+### Changes
+
+- Revert "Scale shards to 1 when there is not enough capacity". It would be useful sometimes. Just raise the warning.
+
 ## 2024-10-10
 
 ### Releases
